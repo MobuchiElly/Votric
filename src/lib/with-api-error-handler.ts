@@ -1,14 +1,13 @@
-
 import { NextResponse } from "next/server";
 import { AppError } from "@/lib/errors";
 
-type RouteHandler = (
+type RouteHandler<TContext = unknown> = (
   request: Request,
-  context: any,
+  context: TContext,
 ) => Promise<Response>;
 
-export function withApiErrorHandler(handler: RouteHandler) {
-  return async (request: Request, context: any): Promise<Response> => {
+export function withApiErrorHandler<TContext = unknown>(handler: RouteHandler<TContext>) {
+  return async (request: Request, context: TContext): Promise<Response> => {
     try {
       return await handler(request, context);
     } catch (error: unknown) {
@@ -24,7 +23,6 @@ export function withApiErrorHandler(handler: RouteHandler) {
         );
       }
 
-      console.error("Unexpected API error:", error);
 
       return NextResponse.json(
         {

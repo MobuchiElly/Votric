@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { CreatePollInput, UpdatePollInput } from "@/schemas/poll.schema";
-import { Description } from "@radix-ui/react-dialog";
+// import { Description } from "@radix-ui/react-dialog";
 
 
 export async function createPoll(userId: string, input: CreatePollInput) {
