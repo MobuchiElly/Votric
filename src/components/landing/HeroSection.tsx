@@ -53,7 +53,7 @@ export function HeroSection() {
                 >
                     <Button
                         size="lg"
-                        className="cursor-pointer bg-white/80 hover:bg-purple-700 text-purple-700 hover:text-purple-600 hover:text-white/90 text-lg font-semibold px-8 py-6 rounded-xl shadow-lg transition-all duration-100"
+                        className="cursor-pointer bg-white hover:bg-purple-700 text-purple-700 hover:text-purple-600 hover:text-white/90 text-lg font-semibold px-8 py-6 rounded-xl shadow-lg transition-all duration-100"
                     >
                         <Link href="/dashboard">Get Started</Link>
                     </Button>
