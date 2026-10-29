@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String     @id @default(uuid())
+  email           String     @unique
+  passwordHash    String
+  name            String?
+  lastLoginAt     DateTime?
+  role            UserRole   @default(USER)
+  status          UserStatus @default(ACTIVE)
+  emailVerifiedAt DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  
+  polls               Poll[]       @relation("PollCreator")
+  moderatedPolls      Poll[]       @relation("PollModerator")
+  pollReports         PollReport[] @relation("PollReportReporter")
+  reviewedPollReports PollReport[] @relation("PollReportReviewer")
+  auditLogs           AuditLog[]   @relation("AuditLogActor")
+  votes Vote[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model VerificationToken {
+  id        String   @id @default(uuid())
+  email     String
+  tokenHash String   @unique
+  type VerificationTokenType
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
+enum VerificationTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model Poll {
+  id          String     @id @default(uuid())
+  creator_id  String?
+  title       String
+  description String?
+  created_at  DateTime   @default(now()) @db.Timestamptz(6)
+
+  status       PollStatus @default(ACTIVE)
+  deletedAt    DateTime?  @map("deleted_at")
+  deletedById  String?    @map("deleted_by_id")
+  deletionNote String?    @map("deletion_note")
+
+  creator User? @relation("PollCreator", fields: [creator_id], references: [id], onDelete: Cascade)
+  deletedBy User? @relation("PollModerator", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  options PollOption[]
+  votes   Vote[]
+  reports PollReport[]
+
+  @@index([status, created_at])
+  @@map("polls")
+}
+
+enum PollStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
+  DELETED
+}
+
+enum PollReportStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum PollReportReason {
+  SPAM
+  HARASSMENT
+  HATE_OR_ABUSE
+  SEXUAL_CONTENT
+  VIOLENCE
+  MISINFORMATION
+  OTHER
+}
+
+model PollReport {
+  id           String           @id @default(uuid())
+  pollId       String           @map("poll_id")
+  reporterId   String?          @map("reporter_id")
+  reason       PollReportReason
+  details      String?
+  status       PollReportStatus @default(OPEN)
+  reviewedById String?          @map("reviewed_by_id")
+  reviewedAt   DateTime?        @map("reviewed_at")
+  resolutionNote String?        @map("resolution_note")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  poll Poll @relation( fields: [pollId], references: [id], onDelete: Cascade )
+
+  reporter User? @relation("PollReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  reviewedBy User? @relation("PollReportReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([pollId, reporterId])
+  @@index([status, createdAt])
+  @@index([reporterId])
+  @@map("poll_reports")
+}
+
+model PollOption {
+  id          String  @id @default(uuid())
+  poll_id     String?
+  option_text String
+
+  poll  Poll?  @relation(fields: [poll_id], references: [id], onDelete: Cascade)
+  votes Vote[]
+
+  @@map("poll_options")
+}
+
+model Vote {
+  id         String   @id @default(uuid())
+  poll_id    String?
+  option_id  String?
+  voter_id   String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+
+  poll   Poll?       @relation(fields: [poll_id], references: [id], onDelete: Cascade)
+  option PollOption? @relation(fields: [option_id], references: [id], onDelete: Cascade)
+  voter  User?       @relation(fields: [voter_id], references: [id], onDelete: Cascade)
+
+  @@unique([poll_id, voter_id])
+  @@map("votes")
+}
+
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  @map("actor_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  note       String?
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User? @relation("AuditLogActor", fields: [actorId],references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}

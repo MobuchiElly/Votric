@@ -71,17 +71,17 @@ export function FeaturesSection() {
 
   return (
     <section className="mt-24 px-2 md:px-8">
-      <div className="max-w-sm md:max-w-5xl lg:max-w-6xl mx-auto text-center">
-        <h2 className="text-3xl md:text-4xl font-bold mb-6">
+      <div className="max-w-sm md:max-w-5xl lg:max-w-7xl mx-auto text-center">
+        <h2 className="text-3xl md:text-4xl text-black font-semibold mb-6">
           Empower Your Decisions with Our Key Features
         </h2>
         <p className="text-lg text-gray-600">
-          Discover how our polling app makes gathering insights effortless and effective.
+          Type your question, drop in your choices, and your poll is ready to go. No complex setups or endless forms.
         </p>
 
         <div 
           ref = {containerRef}
-          className="flex gap-6 mt-20 overflow-hidden scroll-smooth" 
+          className="flex gap-4 mt-20 overflow-hidden scroll-smooth" 
           onMouseEnter={() => setIsHovered(true)} 
           onMouseLeave={() => setIsHovered(false)}>
           {

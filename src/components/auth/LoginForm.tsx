@@ -93,11 +93,11 @@ export function LoginForm() {
           email, password
         }),
       });
-      if (res.status === 200) {
-        toast.success("Login successful!");
-        const redirectUrl = searchParams.get("redirectedFrom") || "/dashboard";
-        router.push(redirectUrl);
-      }
+      const response = await res.json();
+      if (!res.ok) throw new Error(response?.message ?? "Login failed");
+      toast.success("Login successful!");
+      const redirectUrl = searchParams.get("redirectedFrom") || "/dashboard";
+      router.push(redirectUrl);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
       toast.error(errorMessage);

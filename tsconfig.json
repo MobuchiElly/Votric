@@ -39,7 +39,7 @@
     "__tests__/PollForm.unit.test.tsx",
     "__tests__/PollForm.integration.test.ts",
     "src/lib/AuthContext.tsx"
-, "src/app/poll/[id]"  ],
+, "src/app/poll/[id]", "src/schema.prisma"  ],
   "exclude": [
     "node_modules"
   ]

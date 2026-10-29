@@ -1,48 +1,121 @@
-import { createClient } from '@/lib/supabase/server';
-// import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { voteSchema } from "@/schemas/vote.schema";
+import { castVote } from "@/services/vote.service";
+
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext,
 ) {
-    const { id } = await params;
-    const { option_id } = await request.json();
-    
-    if (!option_id) return NextResponse.json(
-        { error: 'option_id is required' },
-        { status: 400 }
-    )
-    try {
-        const supabase = await createClient();
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError || !user) return NextResponse.json({ error: "User authentication required" }, { status: 401 });
-        const userId = user.id;
-   
-        const { data: _data, error } = await supabase
-            .from("votes")
-            .upsert({
-            poll_id: id,
-            option_id,
-            voter_id: userId
-            }, {
-                onConflict: "poll_id,voter_id",
-                ignoreDuplicates: false
-            })
-            .select()
-            .single();
+  try {
+    const user = await getCurrentUser();
 
-        if (error) {
-            console.error("Error upserting vote:", error);
-            return NextResponse.json({ "error": error.message || "Server error" }, { status: 500 });
-        }
-
-        return NextResponse.json({
-            success: true,
-            message: "request successful"
-        },{status: 201})
-    } catch(error){
-        const message = error instanceof Error ? error.message : "Internal server error";
-        return NextResponse.json({ error: message }, { status: 500 });
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Authentication required",
+        },
+        { status: 401 },
+      );
     }
+
+    const { id: pollId } = await params;
+
+    // 3. Validate the request body.
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid JSON request body",
+        },
+        { status: 400 },
+      );
+    }
+
+    const validation = voteSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid request data",
+          details: validation.error.flatten(),
+        },
+        { status: 400 },
+      );
+    }
+
+    // 4. Record the vote.
+    const result = await castVote(
+      pollId,
+      user.id,
+      validation.data.optionId,
+    );
+
+    // 5. Map service errors to HTTP responses.
+    if ("error" in result) {
+      switch (result.error) {
+        case "NOT_FOUND":
+          return NextResponse.json(
+            { success: false, error: "Poll not found" },
+            { status: 404 },
+          );
+
+        case "POLL_NOT_ACTIVE":
+          return NextResponse.json(
+            {
+              success: false,
+              error: "This poll is not accepting votes",
+            },
+            { status: 409 },
+          );
+
+        case "INVALID_OPTION":
+          return NextResponse.json(
+            {
+              success: false,
+              error: "The selected option does not belong to this poll",
+            },
+            { status: 400 },
+          );
+
+        case "ALREADY_VOTED":
+          return NextResponse.json(
+            {
+              success: false,
+              error: "You have already voted on this poll",
+            },
+            { status: 409 },
+          );
+      }
+    }
+
+    // 6. Return the successful vote.
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Vote recorded successfully",
+        data: result,
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    console.error("POST /api/polls/[id]/vote error:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "An unexpected error occurred while recording your vote",
+      },
+      { status: 500 },
+    );
+  }
 }

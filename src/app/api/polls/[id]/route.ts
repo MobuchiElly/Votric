@@ -1,96 +1,230 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { getPollById, updatePoll, archivePoll } from "@/services/poll.service";
+import { updatePollSchema } from "@/schemas/poll.schema";
 
 export async function GET(
-  _request: NextRequest, 
-{ params }: { params: Promise<{ id: string }> }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
   try {
-    const supabase = await createClient();
+    const user = await getCurrentUser();
 
-    const { data: _userData, error: userError } = await supabase.auth.getUser();
-   
-    if (userError) return NextResponse.json({ error: "User authentication required" }, { status: 401 });
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Authentication required",
+        },
+        { status: 401 }
+      );
+    }
 
-    const { data:pollData, error: pollError } = await supabase
-      .from("polls")
-      .select("*, poll_options(*)")
-      .eq("id", id)
-      .maybeSingle();
+    const { id } = await params;
 
-    if (pollError) return NextResponse.json({ "error": pollError }, { status: 500 });
-    if (!pollData) return NextResponse.json({ "error": "Poll not found" }, { status: 404 });
-   
-    return NextResponse.json({
-      success: true,
-      message: "request successful",
-      poll: pollData
-    },{status: 200})
-  } catch(err){
-    const message = err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (!id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Poll ID is required",
+        },
+        { status: 400 }
+      );
+    }
+
+    const poll = await getPollById(id, user.id);
+
+    if (!poll) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Poll not found",
+        },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Poll retrieved successfully",
+        poll,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("GET /api/polls/[id] failed:", error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Unable to retrieve poll",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Invalid JSON request body" },
+        { status: 400 }
+      );
+    }
+
+    const validation = updatePollSchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Validation failed",
+          details: validation.error.flatten(),
+        },
+        { status: 400 }
+      );
+    }
+
+    const result = await updatePoll(id, user.id, validation.data);
+
+    if ("error" in result) {
+      switch (result.error) {
+        case "NOT_FOUND":
+          return NextResponse.json(
+            { success: false, error: "Poll not found" },
+            { status: 404 }
+          );
+
+        case "FORBIDDEN":
+          return NextResponse.json(
+            {
+              success: false,
+              error: "You are not authorized to edit this poll",
+            },
+            { status: 403 }
+          );
+
+        case "VOTING_STARTED":
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "This poll can no longer be edited because voting has started.",
+            },
+            { status: 409 }
+          );
+
+        case "NOT_EDITABLE":
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Only active polls can be edited",
+            },
+            { status: 409 }
+          );
+      }
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Poll updated successfully",
+        poll: result.poll,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("PATCH /api/polls/[id] failed:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Unable to update poll" },
+      { status: 500 }
+    );
   }
 }
 
 export async function DELETE(
-  _request: NextRequest, 
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
-  const { id } = await params;
   try {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    
-    if (error || !user) {
-      return NextResponse.json({ error: error?.message || 'Unauthorized to carry out this request' }, { status: 401 });
-    }
-    const userId = user.id;
-    // First, check if the user is the creator of the poll
-    const { data: poll, error: fetchError } = await supabase
-      .from('polls')
-      .select('creator_id')
-      .eq('id', id)
-      .single();
-    if (fetchError || !poll) {
-      return NextResponse.json({ error: 'This request could not be completed because the resource cannot be found' }, { status: 404 });
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "Authentication required" },
+        { status: 401 }
+      );
     }
 
-    if (poll.creator_id !== userId) {
-      return NextResponse.json({ error: 'You are unauthorised to carry out this request' }, { status: 403 });
+    const { id } = await params;
+    const result = await archivePoll(id, user.id);
+
+    if ("error" in result) {
+      switch (result.error) {
+        case "NOT_FOUND":
+          return NextResponse.json(
+            { success: false, error: "Poll not found" },
+            { status: 404 }
+          );
+
+        case "FORBIDDEN":
+          return NextResponse.json(
+            {
+              success: false,
+              error: "You are not authorized to archive this poll",
+            },
+            { status: 403 }
+          );
+
+        case "ALREADY_ARCHIVED":
+          return NextResponse.json(
+            { success: false, error: "Poll is already archived" },
+            { status: 409 }
+          );
+
+        case "NOT_ARCHIVABLE":
+          return NextResponse.json(
+            { success: false, error: "Poll cannot be archived in its current state" },
+            { status: 409 }
+          );
+      }
     }
 
-    // Delete votes associated with the poll
-    const {error: voteError} = await supabase
-      .from('votes')
-      .delete()
-      .eq('poll_id', id);
-    if(voteError) return NextResponse.json({ error: voteError.message || "Server error" }, { status: 500 });
-
-    // Delete associated poll options
-    const { error: optionsError } = await supabase
-      .from('poll_options')
-      .delete()
-      .eq('poll_id', id);
-    if (optionsError) return NextResponse.json({ error: optionsError.message }, { status: 500 });
-
-    // Delete poll
-    const { error: pollError } = await supabase
-      .from('polls')
-      .delete()
-      .eq('id', id);
-    if (pollError) return NextResponse.json({ error: pollError.message }, { status: 500 });
-
-    return NextResponse.json({ message: 'Poll deleted successfully' }, { status: 200 });
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Poll archived successfully",
+        poll: result.poll,
+      },
+      { status: 200 }
+    );
   } catch (error) {
-    console.error("error:", error);
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("DELETE /api/polls/[id] failed:", error);
+
+    return NextResponse.json(
+      { success: false, error: "Unable to archive poll" },
+      { status: 500 }
+    );
   }
 }
-
-// export async function PATCH(_request: NextRequest, 
-//   {_params}: { params: Promise<{_id: string}>}
-// ){
-//   return NextResponse.json({ message: "Tracking"}, {status: 200});
-// }

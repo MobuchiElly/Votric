@@ -1,29 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
-// import { cookies } from "next/headers";
-import { createClient } from "./lib/supabase/server";
+import { verifyAccessToken } from "@/lib/auth/jwt";
 
-export async function middleware(req: NextRequest){
-    const res = NextResponse.next();
-    // const cookieStore = await cookies();
+export async function middleware(req: NextRequest) {
+  const token = req.cookies.get("access_token")?.value;
 
-    const supabase = await createClient();
-    const { data:{session} } = await supabase.auth.getSession();
-    
-    if((req.nextUrl.pathname.startsWith("/dashboard") || req.nextUrl.pathname.startsWith("/polls")) && !session){
-        //Redirect unauthenticated users to the auth page
-        const redirectUrl = req.nextUrl.clone();
-        redirectUrl.pathname = "/auth/login";
-        redirectUrl.searchParams.set("redirectedFrom", req.nextUrl.pathname);
-        return NextResponse.redirect(redirectUrl);
+  let isAuthenticated = false;
+
+  if (token) {
+    try {
+      const payload = await verifyAccessToken(token);
+
+      isAuthenticated = typeof payload.sub === "string";
+    } catch {
+      // Token is expired, invalid, or malformed.
+      isAuthenticated = false;
     }
-    return res;
-};
+  }
+
+  if (!isAuthenticated) {
+    const redirectUrl = req.nextUrl.clone();
+
+    redirectUrl.pathname = "/auth/login";
+    redirectUrl.search = "";
+
+    redirectUrl.searchParams.set(
+      "redirectedFrom",
+      `${req.nextUrl.pathname}${req.nextUrl.search}`,
+    );
+
+    const response = NextResponse.redirect(redirectUrl);
+
+    // Clear an invalid or expired cookie.
+    if (token) {
+      response.cookies.set("access_token", "", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 0,
+      });
+    }
+
+    return response;
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
-    matcher: [
-        '/dashboard',
-        '/dashboard/:path',
-        '/polls',
-        '/polls/:path'
-    ]
+  matcher: [
+    "/dashboard/:path*",
+    "/polls/:path*",
+  ],
 };

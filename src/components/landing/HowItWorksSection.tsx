@@ -33,12 +33,12 @@ export function HowItWorksSection() {
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
           viewport={{ once: true }}
-          className="text-3xl md:text-4xl font-bold mb-6 text-gray-900"
+          className="text-3xl md:text-4xl font-semibold mb-6 text-gray-900"
         >
-          How It Works
+          From Question to Results in Minutes
         </motion.h2>
         <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-          Just three easy steps to create, share, and analyze your polls effortlessly.
+          Three simple steps are all it takes to build, launch, and analyze your polls.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10 relative mt-20">
